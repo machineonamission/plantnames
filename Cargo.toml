@@ -1,0 +1,9 @@
+[package]
+name = "plantnames"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = { version = "1.0.101", features = ["backtrace"] }
+csv = "1.4.0"
+rusqlite = { version = "0.38.0", features = ["bundled"] }
