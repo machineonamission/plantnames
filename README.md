@@ -10,8 +10,8 @@ these are the most "planty", different groupings are below:
 - [family](genus_by_family.md)
 - [most common climate](genus_by_climate.md)
 - [date first published](genus_by_first_published.md)
-- [count](genus_by_count_grouped.md)
 - [most common "lifeform" (what type of plant is it)](genus_by_lifeform.md)
+- [count (how many species of this genus there are)](genus_by_count_grouped.md)
 - [sorted by count, no grouping](genus_by_count.md)
 
 # species
