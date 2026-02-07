@@ -1,6 +1,6 @@
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use rusqlite::Connection;
+use std::fs::File;
+use std::io::{BufWriter, Seek, Write};
 
 use anyhow;
 use csv::ReaderBuilder;
@@ -9,7 +9,7 @@ fn csv_to_db() -> anyhow::Result<()> {
     let mut rdr = ReaderBuilder::new()
         .delimiter(b'|')
         .from_path(r"C:\Users\Melody\Downloads\wcvp\wcvp_names.csv")?;
-    let mut conn = Connection::open(r"C:\Users\Melody\RustroverProjects\affinames\plampt.db")?;
+    let mut conn = Connection::open(r"C:\Users\Melody\RustroverProjects\plantnames\plampt2.db")?;
 
     conn.execute(
         "CREATE TABLE  IF NOT EXISTS plants (
@@ -29,7 +29,7 @@ fn csv_to_db() -> anyhow::Result<()> {
     publication_author TEXT,
     place_of_publication TEXT,
     volume_and_page TEXT,
-    first_published TEXT,
+    first_published INTEGER,
     nomenclatural_remarks TEXT,
     geographic_area TEXT,
     lifeform_description TEXT,
@@ -87,11 +87,16 @@ fn csv_to_db() -> anyhow::Result<()> {
         }
     }
     println!("committing transaction!");
+    tx.execute(
+        "UPDATE plants
+SET first_published = TRIM(first_published, '()')
+WHERE first_published LIKE '(%)';",
+        [],
+    )?;
     tx.commit()?;
 
     Ok(())
 }
-
 
 fn single() -> anyhow::Result<()> {
     let mut conn = Connection::open(r"C:\Users\Melody\RustroverProjects\affinames\plampt.db")?;
@@ -102,10 +107,10 @@ fn single() -> anyhow::Result<()> {
     let mut writer = BufWriter::new(file);
 
     // 3. Write data using `write!`, `writeln!`, or `write_all`
-    for fam in conn.prepare("select distinct family from plants order by family")?
-        .query_map([], |row| {
-            row.get::<usize, String>(0)
-        })? {
+    for fam in conn
+        .prepare("select distinct family from plants order by family")?
+        .query_map([], |row| row.get::<usize, String>(0))?
+    {
         let fam = fam?;
         write!(writer, "{fam}, ")?;
     }
@@ -119,33 +124,37 @@ fn single() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn groups() -> anyhow::Result<()> {
-    let mut conn = Connection::open(r"C:\Users\Melody\RustroverProjects\affinames\plampt.db")?;
+fn groups(query: &str, path: &str) -> anyhow::Result<()> {
+    let mut conn = Connection::open(r"C:\Users\Melody\RustroverProjects\plantnames\plampt.db")?;
 
-    let path = "genus.md";
+    // let path = "genus.md";
     let file = File::create(path)?;
 
     let mut writer = BufWriter::new(file);
 
-    let mut current_group = ' ';
+    let mut current_group = String::from("INIT");
 
     // 3. Write data using `write!`, `writeln!`, or `write_all`
-    for fam in conn.prepare("select distinct genus from plants order by genus")?
-        .query_map([], |row| {
-            row.get(0)
-        })? {
-        let fam: String = fam?;
+    for name in conn
+        .prepare(query)?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+    {
+        let (fam, group): (String, String) = name?;
 
-        let first_char = fam.chars().next().unwrap_or_default();
-
-        if first_char != current_group {
-            current_group = first_char;
-            writeln!(writer, "\n\n# {current_group}\n")?;
-            println!("{current_group}");
+        if group != current_group {
+            if !group.is_empty() {
+                if current_group != "INIT" {
+                     writeln!(writer, "\n\n")?;
+                }
+                writeln!(writer, "# {group}\n")?;
+                println!("{group}");
+            }
+            current_group = group;
+        } else {
+            write!(writer, ", ")?;
         }
 
-
-        write!(writer, "{fam}, ")?;
+        write!(writer, "{fam}")?;
     }
     // You can also write raw bytes
 
@@ -158,6 +167,72 @@ fn groups() -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
-    groups()?;
+    //     csv_to_db()?;
+    groups(
+        "select distinct family, '' from plants order by family",
+        "family.md",
+    )?;
+    groups(
+        "select distinct genus, substr(genus,1,1) from plants order by genus",
+        "genus_by_name.md",
+    )?;
+    groups(
+        "select distinct species, substr(species,1,2) from plants where species is not null order by species",
+        "species_by_name.md",
+    )?;
+
+    groups(
+        "select distinct genus, family from plants order by family,genus",
+        "genus_by_family.md",
+    )?;
+
+    groups(
+        "select distinct genus, '' from plants group by genus order by count(genus) desc",
+        "genus_by_count.md",
+    )?;
+    groups(
+        "select distinct genus, cast(cast(pow(2, floor(log(2, count(genus)))) as integer) as text) as grp from plants group by genus order by pow(2, floor(log(2, count(genus)))) desc, genus",
+        "genus_by_count_grouped.md",
+    )?;
+    groups(
+        "SELECT DISTINCT
+    genus,
+    FIRST_VALUE(climate_description) OVER (
+        PARTITION BY genus
+        ORDER BY COUNT(climate_description) DESC
+    ) AS most_common_climate
+FROM plants
+WHERE climate_description IS NOT NULL AND climate_description != ''
+GROUP BY genus, climate_description
+ORDER BY climate_description, genus
+",
+        "genus_by_climate.md",
+    )?;
+
+    groups(
+        "SELECT DISTINCT
+        genus,
+        FIRST_VALUE(lifeform_description) OVER (
+            PARTITION BY genus
+            ORDER BY COUNT(lifeform_description) DESC
+        ) AS most_common_climate
+    FROM plants
+    WHERE lifeform_description IS NOT NULL AND lifeform_description != ''
+    GROUP BY genus, lifeform_description
+    ORDER BY lifeform_description, genus
+    ",
+        "genus_by_lifeform.md",
+    )?;
+
+    groups(
+        "SELECT distinct
+    genus,
+    CAST(first_published / 10 * 10 AS TEXT) AS decade
+FROM plants
+WHERE typeof(first_published) is 'integer' and taxon_rank == 'Genus'
+GROUP BY genus
+ORDER BY MIN(first_published) / 10 * 10, genus;",
+        "genus_by_first_published.md",
+    )?;
     Ok(())
 }
