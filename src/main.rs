@@ -234,5 +234,11 @@ GROUP BY genus
 ORDER BY MIN(first_published) / 10 * 10, genus;",
         "genus_by_first_published.md",
     )?;
+
+    groups(
+        "select distinct genus, cast(length(genus) as text) from plants order by length(genus),genus",
+        "genus_by_length.md",
+    )?;
+
     Ok(())
 }

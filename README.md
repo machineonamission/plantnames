@@ -7,6 +7,7 @@ various organizations of scientific plant names when you need to name things in 
 these are the most "planty", different groupings are below:
 
 - [name](genus_by_name.md)
+- [name length](genus_by_length.md)
 - [family](genus_by_family.md)
 - [most common climate](genus_by_climate.md)
 - [date first published](genus_by_first_published.md)
